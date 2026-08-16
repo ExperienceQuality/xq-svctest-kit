@@ -1,0 +1,2 @@
+# v0.1.0-rc.1 establishes the initial public API baseline.
+# The release workflow replaces this file with japicmp evidence before v0.1.0.

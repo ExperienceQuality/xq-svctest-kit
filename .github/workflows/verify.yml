@@ -1,0 +1,36 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      XQ_HUB_TICKET: "67"
+      XQ_MEDIUM_SUITE: xq-svctest-kit-medium
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew check cyclonedxBom
+      # Dependency review is deferred until GitHub Advanced Security is enabled.
+      # Owner: XQ Foundation product owner. Review by: 2026-11-16.
+      - name: Upload TestNG JUnit XML and sanitized diagnostics
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xq-svctest-kit-medium-${{ github.sha }}
+          path: |
+            **/build/test-results/test/*.xml
+            **/build/reports/tests/test
+            build/reports/bom.json
+          if-no-files-found: error
