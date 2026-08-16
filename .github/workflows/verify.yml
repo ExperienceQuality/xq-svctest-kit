@@ -22,6 +22,8 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew check cyclonedxBom
+      # Dependency review is deferred until GitHub Advanced Security is enabled.
+      # Owner: XQ Foundation product owner. Review by: 2026-11-16.
       - name: Upload TestNG JUnit XML and sanitized diagnostics
         uses: actions/upload-artifact@v4
         if: always()
@@ -32,6 +34,3 @@ jobs:
             **/build/reports/tests/test
             build/reports/bom.json
           if-no-files-found: error
-      - name: Dependency review
-        if: github.event_name == 'pull_request'
-        uses: actions/dependency-review-action@v4
