@@ -22,9 +22,66 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Verify release is reachable from main
-        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Verify protected release tag descends from main
+        id: provenance
+        shell: bash
+        env:
+          REF_IS_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_TYPE" = tag
+          test "$REF_IS_PROTECTED" = true
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+          release_commit="$(git rev-list -n 1 "$GITHUB_REF")"
+          main_commit="$(git rev-parse refs/remotes/origin/main)"
+          git merge-base --is-ancestor "$release_commit" "$main_commit"
+
+          {
+            printf 'release_commit=%s\n' "$release_commit"
+            printf 'main_commit=%s\n' "$main_commit"
+          } >> "$GITHUB_OUTPUT"
+      - name: Record release provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-evidence/provenance
+          {
+            printf 'release_tag=%s\n' "$GITHUB_REF_NAME"
+            printf 'release_commit=%s\n' "${{ steps.provenance.outputs.release_commit }}"
+            printf 'main_commit=%s\n' "${{ steps.provenance.outputs.main_commit }}"
+           printf 'workflow_run=%s\n' "$GITHUB_RUN_ID"
+           } > release-evidence/provenance/release-provenance.txt
       - run: ./gradlew check cyclonedxBom
+      - name: Prepare sanitized TestNG JUnit evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          destination=release-evidence/testng-junit
+          mkdir -p "$destination"
+
+          while IFS= read -r -d '' source; do
+            target="$destination/${source#./}"
+            mkdir -p "$(dirname "$target")"
+            perl -pe '
+              s{([A-Za-z][A-Za-z0-9+.-]*://)[^/\s@]+@}{${1}[REDACTED]@}g;
+              s{([?&](?:access[_-]?token|api[_-]?key|authorization|password|secret|token)=)[^&#\s<"]+}{${1}[REDACTED]}gi;
+              s{(Authorization:\s*(?:Bearer|Basic)\s+)[^<\s"]+}{${1}[REDACTED]}gi;
+            ' "$source" > "$target"
+          done < <(find . -path '*/build/test-results/test/*.xml' -type f -print0)
+      - name: Upload release evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xq-svctest-kit-release-evidence-${{ github.run_id }}
+          path: |
+            release-evidence/provenance
+            release-evidence/testng-junit
+            build/reports/bom.json
+            build/reports/bom.xml
+          if-no-files-found: warn
+          retention-days: 90
       - name: Publish immutable version
         run: ./gradlew publish -Pversion="${GITHUB_REF_NAME#v}"
         env:
