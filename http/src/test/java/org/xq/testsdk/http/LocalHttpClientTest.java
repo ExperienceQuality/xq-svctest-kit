@@ -2,6 +2,7 @@ package org.xq.testsdk.http;
 
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -20,6 +21,14 @@ public class LocalHttpClientTest {
             byte[] body = "{\"token\":\"secret-value\",\"status\":\"UP\"}".getBytes();
             exchange.sendResponseHeaders(200, body.length);
             exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.createContext("/stalled", exchange -> {
+            try {
+                Thread.sleep(Duration.ofSeconds(2));
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
             exchange.close();
         });
         server.start();
@@ -55,5 +64,36 @@ public class LocalHttpClientTest {
         AssertionError error = expectThrows(AssertionError.class, () -> client.get("/health").assertStatus(201));
         assertEquals(error.getMessage().contains("secret-value"), false);
         assertEquals(error.getMessage().contains("[REDACTED]"), true);
+    }
+
+    @Test(groups = "xq-svctest-kit-medium")
+    public void rejectsAbsoluteExternalRequestUris() {
+        IllegalArgumentException error = expectThrows(IllegalArgumentException.class,
+            () -> client.get("https://example.com/api?token=secret-value"));
+        assertEquals(error.getMessage().contains("example.com"), true);
+        assertEquals(error.getMessage().contains("secret-value"), false);
+    }
+
+    @Test(groups = "xq-svctest-kit-medium")
+    public void rejectsAuthorityRelativeExternalRequestUris() {
+        IllegalArgumentException error = expectThrows(IllegalArgumentException.class,
+            () -> client.get("//example.com/api?token=secret-value"));
+        assertEquals(error.getMessage().contains("example.com"), true);
+        assertEquals(error.getMessage().contains("secret-value"), false);
+    }
+
+    @Test(groups = "xq-svctest-kit-medium")
+    public void boundsStalledLocalResponsesAndRedactsRequestCredentialsAndQuery() {
+        LocalHttpClient shortTimeoutClient = LocalHttpClient.at(
+            "http://user:secret-value@localhost:" + server.getAddress().getPort(),
+            Duration.ofSeconds(1), Duration.ofMillis(100));
+
+        AssertionError error = expectThrows(AssertionError.class,
+            () -> shortTimeoutClient.get("/stalled?token=secret-value"));
+
+        assertEquals(error.getMessage().contains("secret-value"), false);
+        assertEquals(error.getMessage().contains("token="), false);
+        assertEquals(error.getMessage().contains("/stalled"), true);
+        assertEquals(error.getCause().getMessage().contains("secret-value"), false);
     }
 }
