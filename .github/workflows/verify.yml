@@ -24,13 +24,31 @@ jobs:
       - run: ./gradlew check cyclonedxBom
       # Dependency review is deferred until GitHub Advanced Security is enabled.
       # Owner: XQ Foundation product owner. Review by: 2026-11-16.
-      - name: Upload TestNG JUnit XML and sanitized diagnostics
+      - name: Prepare sanitized TestNG JUnit evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          destination=release-evidence/testng-junit
+          mkdir -p "$destination"
+
+          while IFS= read -r -d '' source; do
+            target="$destination/${source#./}"
+            mkdir -p "$(dirname "$target")"
+            perl -pe '
+              s{([A-Za-z][A-Za-z0-9+.-]*://)[^/\s@]+@}{${1}[REDACTED]@}g;
+              s{([?&](?:access[_-]?token|api[_-]?key|authorization|password|secret|token)=)[^&#\s<"]+}{${1}[REDACTED]}gi;
+              s{(Authorization:\s*(?:Bearer|Basic)\s+)[^<\s"]+}{${1}[REDACTED]}gi;
+            ' "$source" > "$target"
+          done < <(find . -path '*/build/test-results/test/*.xml' -type f -print0)
+      - name: Upload verification evidence
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: xq-svctest-kit-medium-${{ github.sha }}
+          name: xq-svctest-kit-verification-evidence-${{ github.run_id }}
           path: |
-            **/build/test-results/test/*.xml
-            **/build/reports/tests/test
+            release-evidence/testng-junit
             build/reports/bom.json
-          if-no-files-found: error
+            build/reports/bom.xml
+          if-no-files-found: warn
+          retention-days: 90
