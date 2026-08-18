@@ -36,7 +36,7 @@ arch -x86_64 ./gradlew check cyclonedxBom --no-daemon --no-configuration-cache -
 | Evidence | Source | Result | Wall time | Executed PostgreSQL tests | Repeated-run count |
 | --- | --- | --- | --- | --- | --- |
 | Baseline | `14b20ccc0704c44d9e68b2bef7a3e213a170ce7b` | Pass | 18.99s | 1 | 1 |
-| Lifecycle change | `pending commit` | Pass | 16.79s, 16.76s, 16.65s | 3 per run | 3 / 3 pass |
+| Lifecycle change | `5ca7051fa4fc46b6d13225e76bc638fc2c53de7f` | Pass | 16.79s, 16.76s, 16.65s | 3 per run | 3 / 3 pass |
 
 The baseline verifies a disposable PostgreSQL connection. The lifecycle change
 retains that Docker-backed check and adds deterministic coverage that:
